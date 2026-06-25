@@ -13,6 +13,7 @@ import { notifications } from './notifications.js';
 import { tableAlter } from './tableAlter.js';
 import { tableFixes } from './tableFixes.js';
 import { tableSize } from './tableSize.js';
+import { syncMetadata } from './syncMetadata.js';
 import { worldFavorites } from './worldFavorites.js';
 
 import sqliteService from '../sqlite.js';
@@ -40,6 +41,7 @@ const database = {
     ...tableAlter,
     ...tableFixes,
     ...tableSize,
+    ...syncMetadata,
     ...mutualGraph,
 
     setMaxTableSize(limit) {
@@ -215,6 +217,15 @@ const database = {
         );
         await sqliteService.executeNonQuery(
             `CREATE TABLE IF NOT EXISTS avatar_tags (avatar_id TEXT NOT NULL, tag TEXT NOT NULL, color TEXT, PRIMARY KEY (avatar_id, tag))`
+        );
+        await sqliteService.executeNonQuery(
+            `CREATE TABLE IF NOT EXISTS sync_metadata (
+                collection TEXT NOT NULL,
+                record_key TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT,
+                PRIMARY KEY (collection, record_key)
+            )`
         );
     },
 

@@ -116,7 +116,7 @@ const friendLogHistory = {
         return friendLogHistory;
     },
 
-    // https://github.com/vrcx-team/VRCX/issues/1262
+    // https://github.com/MoLiYue/VRCX/issues/1262
     deleteFriendLogHistory(entry) {
         if (entry.rowId != null) {
             sqliteService.executeNonQuery(

@@ -1,15 +1,18 @@
 // @ts-nocheck
 import InteropApi from '../ipc-electron/interopApi.js';
+import RemoteInteropApi from '../ipc-electron/remoteInteropApi.js';
 import configRepository from '../services/config.js';
 import vrcxJsonStorage from '../services/jsonStorage.js';
 
 export async function initInteropApi(isVrOverlay = false) {
+    const interopApi = window.__VRCX_REMOTE__ ? RemoteInteropApi : InteropApi;
+
     if (isVrOverlay) {
         if (WINDOWS) {
             await CefSharp.BindObjectAsync('AppApiVr');
         } else {
             // @ts-ignore
-            window.AppApiVr = InteropApi.AppApiVrElectron;
+            window.AppApiVr = interopApi.AppApiVrElectron;
         }
     } else {
         // #region | Init Cef C# bindings
@@ -24,14 +27,18 @@ export async function initInteropApi(isVrOverlay = false) {
                 'AssetBundleManager'
             );
         } else {
-            window.AppApi = InteropApi.AppApiElectron;
-            window.WebApi = InteropApi.WebApi;
-            window.VRCXStorage = InteropApi.VRCXStorage;
-            window.SQLite = InteropApi.SQLite;
-            window.LogWatcher = InteropApi.LogWatcher;
-            window.Discord = InteropApi.Discord;
-            window.AssetBundleManager = InteropApi.AssetBundleManager;
-            window.AppApiVrElectron = InteropApi.AppApiVrElectron;
+            window.AppApi = interopApi.AppApiElectron;
+            window.WebApi = interopApi.WebApi;
+            window.VRCXStorage = interopApi.VRCXStorage;
+            window.SQLite = interopApi.SQLite;
+            window.LogWatcher = interopApi.LogWatcher;
+            window.Discord = interopApi.Discord;
+            window.AssetBundleManager = interopApi.AssetBundleManager;
+            window.AppApiVrElectron = interopApi.AppApiVrElectron;
+
+            if (window.__VRCX_REMOTE__) {
+                initRemoteElectronCompat();
+            }
         }
 
         await configRepository.init();
@@ -39,4 +46,27 @@ export async function initInteropApi(isVrOverlay = false) {
 
         AppApi.SetUserAgent();
     }
+}
+
+function initRemoteElectronCompat() {
+    const noopListener = () => () => {};
+    window.electron = {
+        getArch: async () => 'remote',
+        getClipboardText: async () => navigator.clipboard?.readText?.() || '',
+        getNoUpdater: async () => true,
+        setTrayIconNotification: async () => {},
+        openFileDialog: async () => '',
+        openDirectoryDialog: async () => '',
+        onWindowPositionChanged: noopListener,
+        onWindowSizeChanged: noopListener,
+        onWindowStateChange: noopListener,
+        onBrowserFocus: noopListener,
+        desktopNotification: async () => {},
+        restartApp: async () => {},
+        getOverlayWindow: async () => null,
+        updateVr: async () => {},
+        ipcRenderer: {
+            on: noopListener
+        }
+    };
 }

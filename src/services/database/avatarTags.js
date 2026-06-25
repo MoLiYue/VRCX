@@ -1,4 +1,9 @@
 import sqliteService from '../sqlite.js';
+import { syncMetadata } from './syncMetadata.js';
+
+function avatarTagRecordKey(avatarId, tag) {
+    return `${avatarId}:${tag}`;
+}
 
 const avatarTags = {
     async getAvatarTags(avatarId) {
@@ -46,6 +51,7 @@ const avatarTags = {
                 '@color': color
             }
         );
+        await syncMetadata.markSyncRecord('avatar_tags', avatarTagRecordKey(avatarId, tag));
     },
 
     async updateAvatarTagColor(avatarId, tag, color) {
@@ -57,9 +63,11 @@ const avatarTags = {
                 '@color': color
             }
         );
+        await syncMetadata.markSyncRecord('avatar_tags', avatarTagRecordKey(avatarId, tag));
     },
 
     async removeAvatarTag(avatarId, tag) {
+        const updatedAt = new Date().toISOString();
         await sqliteService.executeNonQuery(
             `DELETE FROM avatar_tags WHERE avatar_id = @avatar_id AND tag = @tag`,
             {
@@ -67,15 +75,26 @@ const avatarTags = {
                 '@tag': tag
             }
         );
+        await syncMetadata.markSyncRecord('avatar_tags', avatarTagRecordKey(avatarId, tag), updatedAt, updatedAt);
     },
 
     async removeAllAvatarTags(avatarId) {
+        const tags = await this.getAvatarTags(avatarId);
+        const updatedAt = new Date().toISOString();
         await sqliteService.executeNonQuery(
             `DELETE FROM avatar_tags WHERE avatar_id = @avatar_id`,
             {
                 '@avatar_id': avatarId
             }
         );
+        for (const tag of tags) {
+            await syncMetadata.markSyncRecord(
+                'avatar_tags',
+                avatarTagRecordKey(avatarId, tag.tag),
+                updatedAt,
+                updatedAt
+            );
+        }
     }
 };
 

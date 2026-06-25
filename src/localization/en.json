@@ -1157,6 +1157,16 @@
                         "enable_description": "Enables fetching avatar data from a remote database",
                         "avatar_database_provider": "Avatar Database Provider"
                     },
+                    "web_remote": {
+                        "header": "Web Remote",
+                        "enable": "Enable",
+                        "enable_description": "Serve the full VRCX interface for browsers on your local network.",
+                        "port": "Port",
+                        "access_code": "Access Code",
+                        "urls": "URLs",
+                        "copy": "Copy",
+                        "regenerate": "Regenerate"
+                    },
                     "youtube_api": {
                         "header": "YouTube API",
                         "enable": "Enable",

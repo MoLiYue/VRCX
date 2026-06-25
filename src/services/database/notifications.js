@@ -1,6 +1,7 @@
 import { dbVars } from '../database';
 
 import sqliteService from '../sqlite.js';
+import { syncMetadata } from './syncMetadata.js';
 
 const notifications = {
     async getNotifications() {
@@ -78,7 +79,7 @@ const notifications = {
         return notifications;
     },
 
-    addNotificationToDatabase(row) {
+    async addNotificationToDatabase(row) {
         var entry = {
             id: '',
             created_at: '',
@@ -109,7 +110,7 @@ const notifications = {
             console.error('Notification is missing required field', entry);
             throw new Error('Notification is missing required field');
         }
-        sqliteService.executeNonQuery(
+        await sqliteService.executeNonQuery(
             `INSERT OR IGNORE INTO ${dbVars.userPrefix}_notifications (id, created_at, type, sender_user_id, sender_username, receiver_user_id, message, world_id, world_name, image_url, invite_message, request_message, response_message, expired) VALUES (@id, @created_at, @type, @sender_user_id, @sender_username, @receiver_user_id, @message, @world_id, @world_name, @image_url, @invite_message, @request_message, @response_message, @expired)`,
             {
                 '@id': entry.id,
@@ -128,29 +129,33 @@ const notifications = {
                 '@expired': expired
             }
         );
+        await syncMetadata.markSyncRecord('notifications', entry.id, entry.created_at);
     },
 
-    deleteNotification(rowId) {
-        sqliteService.executeNonQuery(
+    async deleteNotification(rowId) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `DELETE FROM ${dbVars.userPrefix}_notifications WHERE id = @row_id`,
             {
                 '@row_id': rowId
             }
         );
+        await syncMetadata.markSyncRecord('notifications', rowId, updatedAt, updatedAt);
     },
 
-    updateNotificationExpired(entry) {
+    async updateNotificationExpired(entry) {
         var expired = 0;
         if (entry.$isExpired) {
             expired = 1;
         }
-        sqliteService.executeNonQuery(
+        await sqliteService.executeNonQuery(
             `UPDATE ${dbVars.userPrefix}_notifications SET expired = @expired WHERE id = @id`,
             {
                 '@id': entry.id,
                 '@expired': expired
             }
         );
+        await syncMetadata.markSyncRecord('notifications', entry.id, new Date().toJSON());
     },
 
     // notifications v2
@@ -184,8 +189,8 @@ const notifications = {
         return notifications;
     },
 
-    addNotificationV2ToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addNotificationV2ToDatabase(entry) {
+        await sqliteService.executeNonQuery(
             `INSERT OR REPLACE INTO ${dbVars.userPrefix}_notifications_v2 (id, created_at, updated_at, expires_at, type, link, link_text, message, title, image_url, seen, sender_user_id, sender_username, data, responses, details) VALUES (@id, @created_at, @updated_at, @expires_at, @type, @link, @link_text, @message, @title, @image_url, @seen, @sender_user_id, @sender_username, @data, @responses, @details)`,
             {
                 '@id': entry.id,
@@ -206,34 +211,41 @@ const notifications = {
                 '@details': JSON.stringify(entry.details || {})
             }
         );
+        await syncMetadata.markSyncRecord('notifications_v2', entry.id, entry.updatedAt || entry.createdAt);
     },
 
-    expireNotificationV2(id) {
-        sqliteService.executeNonQuery(
+    async expireNotificationV2(id) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `UPDATE ${dbVars.userPrefix}_notifications_v2 SET expires_at = @expires_at, seen = 1 WHERE id = @id`,
             {
                 '@id': id,
-                '@expires_at': new Date().toJSON()
+                '@expires_at': updatedAt
             }
         );
+        await syncMetadata.markSyncRecord('notifications_v2', id, updatedAt);
     },
 
-    seenNotificationV2(id) {
-        sqliteService.executeNonQuery(
+    async seenNotificationV2(id) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `UPDATE ${dbVars.userPrefix}_notifications_v2 SET seen = 1 WHERE id = @id`,
             {
                 '@id': id
             }
         );
+        await syncMetadata.markSyncRecord('notifications_v2', id, updatedAt);
     },
 
-    deleteNotificationV2(id) {
-        sqliteService.executeNonQuery(
+    async deleteNotificationV2(id) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `DELETE FROM ${dbVars.userPrefix}_notifications_v2 WHERE id = @id`,
             {
                 '@id': id
             }
         );
+        await syncMetadata.markSyncRecord('notifications_v2', id, updatedAt, updatedAt);
     }
 };
 

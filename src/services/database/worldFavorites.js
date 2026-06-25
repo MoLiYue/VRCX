@@ -1,4 +1,9 @@
 import sqliteService from '../sqlite.js';
+import { syncMetadata } from './syncMetadata.js';
+
+function favoriteRecordKey(entityId, groupName) {
+    return `${entityId}:${groupName}`;
+}
 
 const worldFavorites = {
     addWorldToCache(entry) {
@@ -21,44 +26,61 @@ const worldFavorites = {
         );
     },
 
-    addWorldToFavorites(worldId, groupName) {
-        sqliteService.executeNonQuery(
+    async addWorldToFavorites(worldId, groupName) {
+        const createdAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             'INSERT OR REPLACE INTO favorite_world (world_id, group_name, created_at) VALUES (@world_id, @group_name, @created_at)',
             {
                 '@world_id': worldId,
                 '@group_name': groupName,
-                '@created_at': new Date().toJSON()
+                '@created_at': createdAt
             }
         );
+        await syncMetadata.markSyncRecord('favorite_world', favoriteRecordKey(worldId, groupName), createdAt);
     },
 
-    renameWorldFavoriteGroup(newGroupName, groupName) {
-        sqliteService.executeNonQuery(
+    async renameWorldFavoriteGroup(newGroupName, groupName) {
+        const rows = await this.getWorldFavorites();
+        const renamed = rows.filter((row) => row.groupName === groupName);
+        await sqliteService.executeNonQuery(
             `UPDATE favorite_world SET group_name = @new_group_name WHERE group_name = @group_name`,
             {
                 '@new_group_name': newGroupName,
                 '@group_name': groupName
             }
         );
+        const updatedAt = new Date().toJSON();
+        for (const row of renamed) {
+            await syncMetadata.markSyncRecord('favorite_world', favoriteRecordKey(row.worldId, row.groupName), updatedAt, updatedAt);
+            await syncMetadata.markSyncRecord('favorite_world', favoriteRecordKey(row.worldId, newGroupName), updatedAt);
+        }
     },
 
-    deleteWorldFavoriteGroup(groupName) {
-        sqliteService.executeNonQuery(
+    async deleteWorldFavoriteGroup(groupName) {
+        const rows = await this.getWorldFavorites();
+        const deleted = rows.filter((row) => row.groupName === groupName);
+        await sqliteService.executeNonQuery(
             `DELETE FROM favorite_world WHERE group_name = @group_name`,
             {
                 '@group_name': groupName
             }
         );
+        const updatedAt = new Date().toJSON();
+        for (const row of deleted) {
+            await syncMetadata.markSyncRecord('favorite_world', favoriteRecordKey(row.worldId, row.groupName), updatedAt, updatedAt);
+        }
     },
 
-    removeWorldFromFavorites(worldId, groupName) {
-        sqliteService.executeNonQuery(
+    async removeWorldFromFavorites(worldId, groupName) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `DELETE FROM favorite_world WHERE world_id = @world_id AND group_name = @group_name`,
             {
                 '@world_id': worldId,
                 '@group_name': groupName
             }
         );
+        await syncMetadata.markSyncRecord('favorite_world', favoriteRecordKey(worldId, groupName), updatedAt, updatedAt);
     },
 
     async getWorldFavorites() {

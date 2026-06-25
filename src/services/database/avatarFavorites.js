@@ -1,6 +1,11 @@
 import { dbVars } from '../database';
 
 import sqliteService from '../sqlite.js';
+import { syncMetadata } from './syncMetadata.js';
+
+function favoriteRecordKey(entityId, groupName) {
+    return `${entityId}:${groupName}`;
+}
 
 const avatarFavorites = {
     addAvatarToCache(entry) {
@@ -127,44 +132,61 @@ const avatarFavorites = {
         sqliteService.executeNonQuery('DELETE FROM cache_avatar');
     },
 
-    addAvatarToFavorites(avatarId, groupName) {
-        sqliteService.executeNonQuery(
+    async addAvatarToFavorites(avatarId, groupName) {
+        const createdAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             'INSERT OR REPLACE INTO favorite_avatar (avatar_id, group_name, created_at) VALUES (@avatar_id, @group_name, @created_at)',
             {
                 '@avatar_id': avatarId,
                 '@group_name': groupName,
-                '@created_at': new Date().toJSON()
+                '@created_at': createdAt
             }
         );
+        await syncMetadata.markSyncRecord('favorite_avatar', favoriteRecordKey(avatarId, groupName), createdAt);
     },
 
-    renameAvatarFavoriteGroup(newGroupName, groupName) {
-        sqliteService.executeNonQuery(
+    async renameAvatarFavoriteGroup(newGroupName, groupName) {
+        const rows = await this.getAvatarFavorites();
+        const renamed = rows.filter((row) => row.groupName === groupName);
+        await sqliteService.executeNonQuery(
             `UPDATE favorite_avatar SET group_name = @new_group_name WHERE group_name = @group_name`,
             {
                 '@new_group_name': newGroupName,
                 '@group_name': groupName
             }
         );
+        const updatedAt = new Date().toJSON();
+        for (const row of renamed) {
+            await syncMetadata.markSyncRecord('favorite_avatar', favoriteRecordKey(row.avatarId, row.groupName), updatedAt, updatedAt);
+            await syncMetadata.markSyncRecord('favorite_avatar', favoriteRecordKey(row.avatarId, newGroupName), updatedAt);
+        }
     },
 
-    deleteAvatarFavoriteGroup(groupName) {
-        sqliteService.executeNonQuery(
+    async deleteAvatarFavoriteGroup(groupName) {
+        const rows = await this.getAvatarFavorites();
+        const deleted = rows.filter((row) => row.groupName === groupName);
+        await sqliteService.executeNonQuery(
             `DELETE FROM favorite_avatar WHERE group_name = @group_name`,
             {
                 '@group_name': groupName
             }
         );
+        const updatedAt = new Date().toJSON();
+        for (const row of deleted) {
+            await syncMetadata.markSyncRecord('favorite_avatar', favoriteRecordKey(row.avatarId, row.groupName), updatedAt, updatedAt);
+        }
     },
 
-    removeAvatarFromFavorites(avatarId, groupName) {
-        sqliteService.executeNonQuery(
+    async removeAvatarFromFavorites(avatarId, groupName) {
+        const updatedAt = new Date().toJSON();
+        await sqliteService.executeNonQuery(
             `DELETE FROM favorite_avatar WHERE avatar_id = @avatar_id AND group_name = @group_name`,
             {
                 '@avatar_id': avatarId,
                 '@group_name': groupName
             }
         );
+        await syncMetadata.markSyncRecord('favorite_avatar', favoriteRecordKey(avatarId, groupName), updatedAt, updatedAt);
     },
 
     async getAvatarFavorites() {

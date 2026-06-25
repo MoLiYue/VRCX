@@ -142,6 +142,99 @@
             </SettingsItem>
         </SettingsGroup>
 
+        <!-- Cloud Sync -->
+        <SettingsGroup title="Cloud Sync">
+            <SettingsItem
+                label="Enable"
+                description="Synchronize memos and avatar tags through your self-hosted PostgreSQL sync server.">
+                <Switch :model-value="cloudSyncConfig.enabled" @update:modelValue="setCloudSyncEnabled" />
+            </SettingsItem>
+
+            <SettingsItem label="Endpoint">
+                <Input
+                    v-model="cloudSyncConfig.endpoint"
+                    class="h-8 w-96 max-w-full font-mono"
+                    placeholder="https://moliyue.xyz/vrcx-sync"
+                    @change="saveCloudSyncConfig" />
+            </SettingsItem>
+
+            <SettingsItem label="Access token">
+                <Input
+                    v-model="cloudSyncConfig.token"
+                    class="h-8 w-96 max-w-full font-mono"
+                    type="password"
+                    @change="saveCloudSyncConfig" />
+            </SettingsItem>
+
+            <SettingsItem label="Device ID">
+                <Input :model-value="cloudSyncConfig.deviceId" class="h-8 w-96 max-w-full font-mono" readonly />
+            </SettingsItem>
+
+            <SettingsItem label="Last sync">
+                <div class="flex flex-wrap items-center gap-2">
+                    <Input :model-value="cloudSyncConfig.lastRun || 'Never'" class="h-8 w-56 max-w-full" readonly />
+                    <Button size="sm" variant="outline" :disabled="cloudSyncRunning" @click="runCloudSync">
+                        <RotateCw class="h-4 w-4 mr-1.5" />
+                        Sync now
+                    </Button>
+                </div>
+            </SettingsItem>
+        </SettingsGroup>
+
+        <!-- Web Remote -->
+        <SettingsGroup :title="t('view.settings.advanced.advanced.web_remote.header')">
+            <SettingsItem
+                :label="t('view.settings.advanced.advanced.web_remote.enable')"
+                :description="t('view.settings.advanced.advanced.web_remote.enable_description')">
+                <Switch :model-value="webRemote.enabled" @update:modelValue="setWebRemoteEnabled" />
+            </SettingsItem>
+
+            <SettingsItem :label="t('view.settings.advanced.advanced.web_remote.port')">
+                <Input
+                    v-model.number="webRemote.port"
+                    class="h-8 w-28"
+                    type="number"
+                    min="1024"
+                    max="65535"
+                    @change="saveWebRemoteConfig" />
+            </SettingsItem>
+
+            <SettingsItem :label="t('view.settings.advanced.advanced.web_remote.access_code')">
+                <div class="flex flex-wrap items-center gap-2">
+                    <Input :model-value="webRemote.token" class="h-8 w-56 font-mono" readonly />
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        :title="t('view.settings.advanced.advanced.web_remote.copy')"
+                        @click="copyWebRemoteToken">
+                        <Copy class="h-4 w-4" />
+                    </Button>
+                    <Button
+                        size="icon"
+                        variant="outline"
+                        :title="t('view.settings.advanced.advanced.web_remote.regenerate')"
+                        @click="regenerateWebRemoteToken">
+                        <RotateCw class="h-4 w-4" />
+                    </Button>
+                </div>
+            </SettingsItem>
+
+            <SettingsItem :label="t('view.settings.advanced.advanced.web_remote.urls')">
+                <div class="flex flex-col gap-2">
+                    <div v-for="url in webRemote.urls" :key="url" class="flex items-center gap-2">
+                        <Input :model-value="url" class="h-8 w-72 max-w-full font-mono" readonly />
+                        <Button
+                            size="icon"
+                            variant="outline"
+                            :title="t('view.settings.advanced.advanced.web_remote.copy')"
+                            @click="copyText(url)">
+                            <Smartphone class="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+            </SettingsItem>
+        </SettingsGroup>
+
         <TranslationApiDialog v-model:isTranslationApiDialogVisible="isTranslationApiDialogVisible" />
         <YouTubeApiDialog v-model:isYouTubeApiDialogVisible="isYouTubeApiDialogVisible" />
         <AvatarProviderDialog v-model:isAvatarProviderDialogVisible="isAvatarProviderDialogVisible" />
@@ -149,9 +242,11 @@
 </template>
 
 <script setup>
-    import { ref } from 'vue';
-    import { Languages } from 'lucide-vue-next';
+    import { onMounted, reactive, ref } from 'vue';
+    import { Copy, Languages, RotateCw, Smartphone } from 'lucide-vue-next';
+    import { toast } from 'vue-sonner';
     import { Button } from '@/components/ui/button';
+    import { Input } from '@/components/ui/input';
     import { Switch } from '@/components/ui/switch';
     import { storeToRefs } from 'pinia';
     import { useI18n } from 'vue-i18n';
@@ -160,9 +255,13 @@
         useAdvancedSettingsStore,
         useAvatarProviderStore,
         useDiscordPresenceSettingsStore,
+        useGameLogStore,
+        useNotificationStore,
+        useUserStore,
         useVrStore
     } from '@/stores';
 
+    import { cloudSync } from '@/services/cloudSync';
     import AvatarProviderDialog from '../../dialogs/AvatarProviderDialog.vue';
     import TranslationApiDialog from '../../dialogs/TranslationApiDialog.vue';
     import YouTubeApiDialog from '../../dialogs/YouTubeApiDialog.vue';
@@ -172,6 +271,8 @@
     const { t } = useI18n();
 
     const advancedSettingsStore = useAdvancedSettingsStore();
+    const gameLogStore = useGameLogStore();
+    const notificationStore = useNotificationStore();
     const { updateVRLastLocation, updateOpenVR } = useVrStore();
 
     const {
@@ -200,6 +301,7 @@
     const { showVRChatConfig } = advancedSettingsStore;
 
     const { avatarRemoteDatabase, youTubeApi, translationApi } = storeToRefs(advancedSettingsStore);
+    const { currentUser } = storeToRefs(useUserStore());
 
     const { setAvatarRemoteDatabase } = advancedSettingsStore;
 
@@ -208,6 +310,27 @@
 
     const isYouTubeApiDialogVisible = ref(false);
     const isTranslationApiDialogVisible = ref(false);
+    const webRemote = reactive({
+        enabled: false,
+        running: false,
+        port: 23590,
+        token: '',
+        urls: []
+    });
+    const cloudSyncConfig = reactive({
+        enabled: false,
+        endpoint: '',
+        token: '',
+        deviceId: '',
+        lastRun: '',
+        cursor: 0
+    });
+    const cloudSyncRunning = ref(false);
+
+    onMounted(() => {
+        loadWebRemoteConfig();
+        loadCloudSyncConfig();
+    });
 
     /**
      *
@@ -242,6 +365,98 @@
     async function changeTranslationAPI(configKey = '') {
         if (configKey === 'VRCX_translationAPI') {
             advancedSettingsStore.setTranslationApi();
+        }
+    }
+
+    async function loadWebRemoteConfig() {
+        try {
+            applyWebRemoteConfig(JSON.parse(await AppApi.GetRemoteAccessConfig()));
+        } catch (err) {
+            console.error('Failed to load web remote config:', err);
+        }
+    }
+
+    async function setWebRemoteEnabled(enabled) {
+        webRemote.enabled = enabled;
+        await saveWebRemoteConfig();
+    }
+
+    async function saveWebRemoteConfig() {
+        try {
+            const port = Number(webRemote.port) || 23590;
+            applyWebRemoteConfig(
+                JSON.parse(await AppApi.SetRemoteAccessConfig(webRemote.enabled, port))
+            );
+        } catch (err) {
+            console.error('Failed to save web remote config:', err);
+        }
+    }
+
+    async function regenerateWebRemoteToken() {
+        try {
+            applyWebRemoteConfig(JSON.parse(await AppApi.RegenerateRemoteAccessToken()));
+        } catch (err) {
+            console.error('Failed to regenerate web remote token:', err);
+        }
+    }
+
+    function copyWebRemoteToken() {
+        copyText(webRemote.token);
+    }
+
+    function copyText(text) {
+        navigator.clipboard?.writeText(text).catch(() => {});
+    }
+
+    function applyWebRemoteConfig(config) {
+        webRemote.enabled = Boolean(config?.enabled);
+        webRemote.running = Boolean(config?.running);
+        webRemote.port = Number(config?.port) || 23590;
+        webRemote.token = config?.token || '';
+        webRemote.urls = Array.isArray(config?.urls) ? config.urls : [];
+    }
+
+    async function loadCloudSyncConfig() {
+        try {
+            Object.assign(cloudSyncConfig, await cloudSync.getConfig());
+        } catch (err) {
+            console.error('Failed to load cloud sync config:', err);
+        }
+    }
+
+    async function setCloudSyncEnabled(enabled) {
+        cloudSyncConfig.enabled = enabled;
+        await saveCloudSyncConfig();
+    }
+
+    async function saveCloudSyncConfig() {
+        try {
+            await cloudSync.setConfig(cloudSyncConfig);
+        } catch (err) {
+            console.error('Failed to save cloud sync config:', err);
+            toast.error(`Failed to save cloud sync config: ${err.message}`);
+        }
+    }
+
+    async function runCloudSync() {
+        try {
+            await saveCloudSyncConfig();
+            cloudSyncRunning.value = true;
+            const result = await cloudSync.sync(currentUser.value?.id || '');
+            await Promise.allSettled([
+                gameLogStore.gameLogTableLookup(),
+                gameLogStore.loadSessionsSegments(),
+                notificationStore.initNotifications()
+            ]);
+            await loadCloudSyncConfig();
+            toast.success(
+                `Sync complete: pulled ${result.pulled}, applied ${result.applied}, pushed ${result.pushed}`
+            );
+        } catch (err) {
+            console.error('Cloud sync failed:', err);
+            toast.error(`Cloud sync failed: ${err.message}`);
+        } finally {
+            cloudSyncRunning.value = false;
         }
     }
 </script>

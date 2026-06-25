@@ -1158,6 +1158,16 @@
                         "enable_description": "启用从远程数据库获取模型数据的功能",
                         "avatar_database_provider": "数据库提供方设置"
                     },
+                    "web_remote": {
+                        "header": "网页后台",
+                        "enable": "启用",
+                        "enable_description": "在本地网络中提供完整的 VRCX 浏览器界面。",
+                        "port": "端口",
+                        "access_code": "访问码",
+                        "urls": "访问地址",
+                        "copy": "复制",
+                        "regenerate": "重新生成"
+                    },
                     "youtube_api": {
                         "header": "YouTube API",
                         "enable": "启用",

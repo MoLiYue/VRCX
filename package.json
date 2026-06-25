@@ -5,15 +5,15 @@
     "keywords": [
         "vrchat"
     ],
-    "homepage": "https://github.com/vrcx-team/VRCX#readme",
+    "homepage": "https://github.com/MoLiYue/VRCX#readme",
     "bugs": {
-        "url": "https://github.com/vrcx-team/VRCX/issues"
+        "url": "https://github.com/MoLiYue/VRCX/issues"
     },
     "license": "MIT",
     "author": "VRCX Team",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/vrcx-team/VRCX.git"
+        "url": "git+https://github.com/MoLiYue/VRCX.git"
     },
     "main": "src-electron/main.js",
     "scripts": {
@@ -198,5 +198,6 @@
             "category": "public.app-category.utilities",
             "executableName": "VRCX"
         }
-    }
+    },
+    "version": "2026.05.03"
 }

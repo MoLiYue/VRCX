@@ -21,16 +21,16 @@ const bundledDotNetPath = path.join(process.resourcesPath, 'dotnet-runtime');
 if (fs.existsSync(bundledDotNetPath)) {
     // Include bundled .NET runtime
     process.env.DOTNET_ROOT = bundledDotNetPath;
-    process.env.PATH = `${bundledDotNetPath}:${process.env.PATH}`;
+    process.env.PATH = `${bundledDotNetPath}${path.delimiter}${process.env.PATH}`;
 } else if (process.platform === 'darwin') {
     const dotnetPath = path.join('/usr/local/share/dotnet');
     const dotnetPathArm = path.join('/usr/local/share/dotnet/x64');
     if (fs.existsSync(dotnetPathArm)) {
         process.env.DOTNET_ROOT = dotnetPathArm;
-        process.env.PATH = `${dotnetPathArm}:${process.env.PATH}`;
+        process.env.PATH = `${dotnetPathArm}${path.delimiter}${process.env.PATH}`;
     } else if (fs.existsSync(dotnetPath)) {
         process.env.DOTNET_ROOT = dotnetPath;
-        process.env.PATH = `${dotnetPath}:${process.env.PATH}`;
+        process.env.PATH = `${dotnetPath}${path.delimiter}${process.env.PATH}`;
     }
 }
 
@@ -125,6 +125,25 @@ interopApi.getDotNetObject('LogWatcher').Init();
 
 interopApi.getDotNetObject('SystemMonitorElectron').Init();
 interopApi.getDotNetObject('AppApiVrElectron').Init();
+
+const remoteAccessServer = interopApi.getDotNetObject('RemoteAccessServer');
+[
+    'AppApiElectron',
+    'VRCXStorage',
+    'SQLite',
+    'WebApi',
+    'LogWatcher',
+    'Discord',
+    'AssetBundleManager',
+    'AppApiVrElectron'
+].forEach((className) => {
+    remoteAccessServer.RegisterTarget(
+        className,
+        interopApi.getDotNetObject(className)
+    );
+});
+remoteAccessServer.RegisterTarget('AppApi', interopApi.getDotNetObject('AppApiElectron'));
+remoteAccessServer.Init();
 
 ipcMain.handle('callDotNetMethod', (event, className, methodName, args) => {
     return interopApi.callMethod(className, methodName, args);
@@ -809,14 +828,20 @@ function getVersion() {
         // look for trailing git hash "-22bcd96" to indicate nightly build
         const version = versionFile.split('-');
         console.log('Version:', versionFile);
+        const platformName =
+            process.platform === 'win32'
+                ? 'Windows'
+                : process.platform === 'darwin'
+                  ? 'macOS'
+                  : 'Linux';
         if (version.length > 0 && version[version.length - 1].length == 7) {
-            return `VRCX (Linux) Nightly ${versionFile}`;
+            return `VRCX (${platformName}) Nightly ${versionFile}`;
         } else {
-            return `VRCX (Linux) ${versionFile}`;
+            return `VRCX (${platformName}) ${versionFile}`;
         }
     } catch (err) {
         console.error('Error reading Version:', err);
-        return 'VRCX (Linux) Nightly Build';
+        return 'VRCX Nightly Build';
     }
 }
 
@@ -945,6 +970,7 @@ function disposeOverlay() {
 app.on('before-quit', function () {
     // Mark it as a quitting state to make macOS Dock's "Quit" action take effect.
     appIsQuitting = true;
+    interopApi.getDotNetObject('RemoteAccessServer').Exit();
     disposeOverlay();
     destroyTray();
 });

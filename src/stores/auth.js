@@ -11,6 +11,7 @@ import {
 } from '../coordinators/authCoordinator';
 import { AppDebug } from '../services/appConfig';
 import { authRequest } from '../api';
+import { cloudSync } from '../services/cloudSync';
 import { database } from '../services/database';
 import { escapeTag } from '../shared/utils';
 import { links } from '../shared/constants/link';
@@ -18,6 +19,7 @@ import { initWebsocket } from '../services/websocket';
 import { request } from '../services/request';
 import { runHandleAutoLoginFlow } from '../coordinators/authAutoLoginCoordinator';
 import { getCurrentUser } from '../coordinators/userCoordinator';
+import { router } from '../plugins/router';
 import { useAdvancedSettingsStore } from './settings/advanced';
 import { useGeneralSettingsStore } from './settings/general';
 import { useModalStore } from './modal';
@@ -96,6 +98,7 @@ export const useAuthStore = defineStore('Auth', () => {
                         name: `<strong>${escapeTag(currentUser.displayName)}</strong>`
                     })
                 }).show();
+                runCloudSyncAfterLogin(currentUser.id);
             }
         },
         { flush: 'sync' }
@@ -133,15 +136,25 @@ export const useAuthStore = defineStore('Auth', () => {
 
     init();
 
+    async function runCloudSyncAfterLogin(userId) {
+        try {
+            if (!(await cloudSync.isEnabled())) {
+                return;
+            }
+            await cloudSync.sync(userId);
+        } catch (err) {
+            console.error('Cloud sync after login failed:', err);
+            toast.error(`Cloud sync failed: ${err.message}`);
+        }
+    }
+
     /**
      *
      */
     async function getAllSavedCredentials() {
         let savedCredentials = {};
         try {
-            savedCredentials = JSON.parse(
-                await configRepository.getString('savedCredentials', '{}')
-            );
+            savedCredentials = JSON.parse(await getSavedCredentialsJson());
             let edited = false;
             for (const userId in savedCredentials) {
                 // fix goofy typo
@@ -161,7 +174,7 @@ export const useAuthStore = defineStore('Auth', () => {
                     edited = true;
                 }
             }
-            if (edited) {
+            if (edited && !isRemoteAccessPage()) {
                 await configRepository.setString(
                     'savedCredentials',
                     JSON.stringify(savedCredentials)
@@ -171,6 +184,63 @@ export const useAuthStore = defineStore('Auth', () => {
             console.error('Failed to get saved credentials:', e);
         }
         return savedCredentials;
+    }
+
+    async function getSavedCredentialsJson() {
+        if (isRemoteAccessPage()) {
+            return await getRemoteSavedCredentialsJson();
+        }
+        if (typeof globalThis.AppApi?.GetSavedCredentialsJson === 'function') {
+            try {
+                return await globalThis.AppApi.GetSavedCredentialsJson();
+            } catch (error) {
+                if (window.__VRCX_REMOTE__) {
+                    throw error;
+                }
+            }
+        }
+        return await configRepository.getString('savedCredentials', '{}');
+    }
+
+    function isRemoteAccessPage() {
+        return (
+            typeof window !== 'undefined' &&
+            (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+        );
+    }
+
+    async function getRemoteSavedCredentialsJson() {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        const token = getRemoteAccessToken();
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        const response = await fetch('/api/rpc', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                className: 'AppApi',
+                methodName: 'GetSavedCredentialsJson',
+                args: []
+            })
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+            throw new Error(payload.error || response.statusText);
+        }
+        return payload.result || '{}';
+    }
+
+    function getRemoteAccessToken() {
+        const token = new URLSearchParams(window.location.search).get('token');
+        if (token) {
+            document.cookie = `vrcx_remote_token=${encodeURIComponent(token)}; path=/; max-age=31536000; SameSite=Lax`;
+            return token;
+        }
+        const match = document.cookie.match(/(?:^|;\s*)vrcx_remote_token=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
     }
 
     /**
@@ -219,6 +289,14 @@ export const useAuthStore = defineStore('Auth', () => {
                 await authRequest.getConfig();
                 try {
                     await getCurrentUser();
+                    if (isRemoteAccessPage() && router.currentRoute.value.name === 'login') {
+                        const redirect = router.currentRoute.value.query.redirect;
+                        if (typeof redirect === 'string' && redirect.startsWith('/') && redirect !== '/login') {
+                            await router.replace(redirect);
+                        } else {
+                            await router.replace({ name: 'feed' });
+                        }
+                    }
                 } catch (err) {
                     updateLoopStore.setNextCurrentUserRefresh(60); // 1min
                     console.error(err);
@@ -503,6 +581,10 @@ export const useAuthStore = defineStore('Auth', () => {
      *
      */
     async function migrateStoredUsers() {
+        if (isRemoteAccessPage()) {
+            return;
+        }
+
         const savedCredentials = await getAllSavedCredentials();
         for (const name in savedCredentials) {
             const userId = savedCredentials[name]?.user?.id;

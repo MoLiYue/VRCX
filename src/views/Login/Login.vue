@@ -188,7 +188,7 @@
         DropdownMenuContent,
         DropdownMenuTrigger
     } from '@/components/ui/dropdown-menu';
-    import { onBeforeMount, onBeforeUnmount, ref, watch } from 'vue';
+    import { onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
     import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
     import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item';
     import { ArrowBigDownDash, Languages, Trash2, TriangleAlert, User } from 'lucide-vue-next';
@@ -223,8 +223,9 @@
     const { showVRCXUpdateDialog } = useVRCXUpdaterStore();
     const router = useRouter();
     const route = useRoute();
-    const { loginForm } = storeToRefs(useAuthStore());
-    const { relogin, deleteSavedLogin, login, getAllSavedCredentials } = useAuthStore();
+    const authStore = useAuthStore();
+    const { loginForm } = storeToRefs(authStore);
+    const { relogin, deleteSavedLogin, login, getAllSavedCredentials } = authStore;
     const { noUpdater, pendingVRCXUpdate } = storeToRefs(useVRCXUpdaterStore());
 
     const appearanceSettingsStore = useAppearanceSettingsStore();
@@ -287,9 +288,6 @@
      *
      */
     async function updateSavedCredentials() {
-        if (watchState.isLoggedIn) {
-            return;
-        }
         savedCredentials.value = await getAllSavedCredentials();
     }
 
@@ -376,9 +374,11 @@
     }
 
     onBeforeMount(async () => {
-        updateSavedCredentials();
+        await updateSavedCredentials();
         detectAndPromptLanguage();
     });
+
+    onMounted(updateSavedCredentials);
 
     onBeforeUnmount(() => {
         isActive = false;
