@@ -11,6 +11,19 @@
 
 VRCX is an assistant/companion application for VRChat that provides information about and helps you accomplish various things related to VRChat in a more convenient fashion than relying on the plain VRChat client (desktop or VR), or website alone. It also includes some other neat features outlined below.
 
+# Fork Additions
+
+This fork keeps the upstream VRCX experience while adding a few self-hosted and multi-device focused features:
+
+- Self-hosted Cloud Sync for memos, avatar tags, favorites, notifications, friend log history, and GameLog tables.
+- A Dockerized PostgreSQL sync server under [`sync-server`](./sync-server) with bearer-token protected pull/push APIs.
+- Periodic Cloud Sync refresh after login, plus manual sync controls in `Settings -> Integrations`.
+- Web Remote access support for opening a protected browser session against a running VRCX desktop instance.
+- Remote interop support so the web session can call selected VRCX APIs without running local desktop-only startup work.
+- Cross-platform build workflow for Windows, Linux, and macOS artifacts in [`Build Apps`](./.github/workflows/build-apps.yml).
+
+For Linux container deployment, see [Linux Container Deployment](./docs/linux-container-deployment.md).
+
 # Getting Started
 
 <div align="center">

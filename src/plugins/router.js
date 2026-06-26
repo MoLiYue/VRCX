@@ -158,6 +158,10 @@ router.beforeEach((to) => {
     }
 
     const requiresAuth = to.matched.some((record) => record.meta?.requiresAuth);
+    if (requiresAuth && !watchState.isLoggedIn && watchState.isAuthRestoring) {
+        return true;
+    }
+
     if (requiresAuth && !watchState.isLoggedIn) {
         const redirect = to.fullPath;
         if (redirect && redirect !== '/feed') {

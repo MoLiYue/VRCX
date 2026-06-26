@@ -6,7 +6,13 @@ import { useModalStore } from '../stores';
 class SQLiteService {
     handleSQLiteError(e) {
         if (typeof e.message === 'string') {
-            const modalStore = useModalStore();
+            let modalStore;
+            try {
+                modalStore = useModalStore();
+            } catch (storeError) {
+                console.error('SQLite error before modal store is ready', e);
+                throw e;
+            }
             if (e.message.includes('database disk image is malformed')) {
                 modalStore
                     .confirm({

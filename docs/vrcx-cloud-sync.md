@@ -24,7 +24,7 @@ The sync server runs on Docker with PostgreSQL. It stores per-record JSON payloa
 
 ## Server Deployment
 
-On `moliyue.xyz`:
+On your Linux server:
 
 ```bash
 cd sync-server
@@ -58,7 +58,7 @@ location /vrcx-sync/ {
 Health check:
 
 ```bash
-curl https://moliyue.xyz/vrcx-sync/health
+curl https://sync.example.com/vrcx-sync/health
 ```
 
 `CORS_ORIGIN=*` keeps desktop VRCX clients working across Electron origins. The API still requires the `SYNC_TOKEN` bearer token.
@@ -70,7 +70,7 @@ Open VRCX settings, then go to Integrations > Cloud Sync.
 Use:
 
 ```text
-Endpoint: https://moliyue.xyz/vrcx-sync
+Endpoint: https://sync.example.com/vrcx-sync
 Access token: value of SYNC_TOKEN
 ```
 

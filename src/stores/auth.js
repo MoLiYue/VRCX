@@ -282,45 +282,74 @@ export const useAuthStore = defineStore('Auth', () => {
      * @returns {Promise<void>}
      */
     async function autoLoginAfterMounted() {
-        const canAutoLogin = await vrcxStore.waitForDatabaseInit();
-        if (!canAutoLogin) {
-            console.warn(
-                'Skipping auto-login after mount because database initialization did not complete successfully.'
-            );
-            return;
-        }
-        if (
-            !advancedSettingsStore.enablePrimaryPassword &&
-            (await configRepository.getString('lastUserLoggedIn')) !== null
-        ) {
-            const user = await getSavedCredentials(
-                loginForm.value.lastUserLoggedIn
-            );
-            if (user?.loginParams?.endpoint) {
-                AppDebug.endpointDomain = user.loginParams.endpoint;
-                AppDebug.websocketDomain = user.loginParams.websocket;
+        try {
+            const canAutoLogin = await vrcxStore.waitForDatabaseInit();
+            if (!canAutoLogin) {
+                console.warn(
+                    'Skipping auto-login after mount because database initialization did not complete successfully.'
+                );
+                return;
             }
-            await applyAutoLoginDelay();
-            // login at startup
-            loginForm.value.loading = true;
-            try {
-                await authRequest.getConfig();
-                try {
-                    await getCurrentUser();
-                    if (isRemoteAccessPage() && router.currentRoute.value.name === 'login') {
-                        const redirect = router.currentRoute.value.query.redirect;
-                        if (typeof redirect === 'string' && redirect.startsWith('/') && redirect !== '/login') {
-                            await router.replace(redirect);
-                        } else {
-                            await router.replace({ name: 'feed' });
-                        }
-                    }
-                } catch (err) {
-                    updateLoopStore.setNextCurrentUserRefresh(60); // 1min
-                    console.error(err);
+            if (
+                !advancedSettingsStore.enablePrimaryPassword &&
+                (await configRepository.getString('lastUserLoggedIn')) !== null
+            ) {
+                const user = await getSavedCredentials(
+                    loginForm.value.lastUserLoggedIn
+                );
+                if (user?.loginParams?.endpoint) {
+                    AppDebug.endpointDomain = user.loginParams.endpoint;
+                    AppDebug.websocketDomain = user.loginParams.websocket;
                 }
-            } finally {
-                loginForm.value.loading = false;
+                await applyAutoLoginDelay();
+                // login at startup
+                loginForm.value.loading = true;
+                try {
+                    await authRequest.getConfig();
+                    try {
+                        await getCurrentUser();
+                        if (
+                            isRemoteAccessPage() &&
+                            router.currentRoute.value.name === 'login'
+                        ) {
+                            const redirect =
+                                router.currentRoute.value.query.redirect;
+                            if (
+                                typeof redirect === 'string' &&
+                                redirect.startsWith('/') &&
+                                redirect !== '/login'
+                            ) {
+                                await router.replace(redirect);
+                            } else {
+                                await router.replace({ name: 'feed' });
+                            }
+                        }
+                    } catch (err) {
+                        updateLoopStore.setNextCurrentUserRefresh(60); // 1min
+                        console.error(err);
+                    }
+                } finally {
+                    loginForm.value.loading = false;
+                }
+            }
+        } finally {
+            watchState.isAuthRestoring = false;
+            try {
+                const requiresAuth = router.currentRoute.value.matched.some(
+                    (record) => record.meta?.requiresAuth
+                );
+                if (
+                    isRemoteAccessPage() &&
+                    requiresAuth &&
+                    !watchState.isLoggedIn
+                ) {
+                    await router.replace({
+                        name: 'login',
+                        query: { redirect: router.currentRoute.value.fullPath }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
             }
         }
     }

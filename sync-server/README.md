@@ -2,7 +2,9 @@
 
 Dockerized PostgreSQL sync service for self-hosted VRCX multi-device sync.
 
-## Deploy on moliyue.xyz
+For the full Linux container deployment guide, see [docs/linux-container-deployment.md](../docs/linux-container-deployment.md).
+
+## Deploy on your server
 
 ```bash
 cd sync-server
@@ -22,7 +24,7 @@ location /vrcx-sync/ {
 }
 ```
 
-Use `https://moliyue.xyz/vrcx-sync` as the VRCX sync endpoint.
+Use `https://sync.example.com/vrcx-sync` as the VRCX sync endpoint.
 
 `CORS_ORIGIN=*` is the most convenient value for desktop VRCX clients. The sync API is still protected by `SYNC_TOKEN`.
 
