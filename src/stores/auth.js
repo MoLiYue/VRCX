@@ -22,7 +22,9 @@ import { getCurrentUser } from '../coordinators/userCoordinator';
 import { router } from '../plugins/router';
 import { useAdvancedSettingsStore } from './settings/advanced';
 import { useGeneralSettingsStore } from './settings/general';
+import { useGameLogStore } from './gameLog';
 import { useModalStore } from './modal';
+import { useNotificationStore } from './notification';
 import { useUpdateLoopStore } from './updateLoop';
 import { useUserStore } from './user';
 import { useVrcxStore } from './vrcx';
@@ -38,6 +40,8 @@ import { useActivityStore } from './activity';
 export const useAuthStore = defineStore('Auth', () => {
     const advancedSettingsStore = useAdvancedSettingsStore();
     const generalSettingsStore = useGeneralSettingsStore();
+    const gameLogStore = useGameLogStore();
+    const notificationStore = useNotificationStore();
     const userStore = useUserStore();
     const updateLoopStore = useUpdateLoopStore();
     const modalStore = useModalStore();
@@ -99,6 +103,8 @@ export const useAuthStore = defineStore('Auth', () => {
                     })
                 }).show();
                 runCloudSyncAfterLogin(currentUser.id);
+            } else {
+                cloudSync.stopAutoSync();
             }
         },
         { flush: 'sync' }
@@ -142,6 +148,18 @@ export const useAuthStore = defineStore('Auth', () => {
                 return;
             }
             await cloudSync.sync(userId);
+            cloudSync.startAutoSync(userId, {
+                async onSynced() {
+                    await Promise.allSettled([
+                        gameLogStore.gameLogTableLookup(),
+                        gameLogStore.loadSessionsSegments(),
+                        notificationStore.initNotifications()
+                    ]);
+                },
+                onError(err) {
+                    toast.error(`Cloud sync failed: ${err.message}`);
+                }
+            });
         } catch (err) {
             console.error('Cloud sync after login failed:', err);
             toast.error(`Cloud sync failed: ${err.message}`);

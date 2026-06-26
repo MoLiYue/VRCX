@@ -419,6 +419,7 @@
     async function loadCloudSyncConfig() {
         try {
             Object.assign(cloudSyncConfig, await cloudSync.getConfig());
+            updateCloudSyncAutoTimer();
         } catch (err) {
             console.error('Failed to load cloud sync config:', err);
         }
@@ -432,10 +433,33 @@
     async function saveCloudSyncConfig() {
         try {
             await cloudSync.setConfig(cloudSyncConfig);
+            updateCloudSyncAutoTimer();
         } catch (err) {
             console.error('Failed to save cloud sync config:', err);
             toast.error(`Failed to save cloud sync config: ${err.message}`);
         }
+    }
+
+    function updateCloudSyncAutoTimer() {
+        if (!cloudSyncConfig.enabled || !currentUser.value?.id) {
+            cloudSync.stopAutoSync();
+            return;
+        }
+        cloudSync.startAutoSync(currentUser.value.id, {
+            onSynced: refreshSyncedViews,
+            onError(err) {
+                toast.error(`Cloud sync failed: ${err.message}`);
+            }
+        });
+    }
+
+    async function refreshSyncedViews() {
+        await Promise.allSettled([
+            gameLogStore.gameLogTableLookup(),
+            gameLogStore.loadSessionsSegments(),
+            notificationStore.initNotifications()
+        ]);
+        await loadCloudSyncConfig();
     }
 
     async function runCloudSync() {
@@ -443,12 +467,8 @@
             await saveCloudSyncConfig();
             cloudSyncRunning.value = true;
             const result = await cloudSync.sync(currentUser.value?.id || '');
-            await Promise.allSettled([
-                gameLogStore.gameLogTableLookup(),
-                gameLogStore.loadSessionsSegments(),
-                notificationStore.initNotifications()
-            ]);
-            await loadCloudSyncConfig();
+            await refreshSyncedViews();
+            updateCloudSyncAutoTimer();
             toast.success(
                 `Sync complete: pulled ${result.pulled}, applied ${result.applied}, pushed ${result.pushed}`
             );

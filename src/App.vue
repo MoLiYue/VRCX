@@ -71,7 +71,9 @@
         getGameLogTable();
         await store.auth.migrateStoredUsers();
         store.auth.autoLoginAfterMounted();
-        store.vrcx.checkAutoBackupRestoreVrcRegistry();
+        if (!window.__VRCX_REMOTE__) {
+            store.vrcx.checkAutoBackupRestoreVrcRegistry();
+        }
         runCheckVRChatDebugLoggingFlow();
     });
 </script>

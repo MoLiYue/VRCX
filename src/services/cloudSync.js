@@ -8,6 +8,7 @@ const SYNC_TOKEN_KEY = 'VRCX_cloudSyncToken';
 const SYNC_DEVICE_ID_KEY = 'VRCX_cloudSyncDeviceId';
 const SYNC_CURSOR_KEY = 'VRCX_cloudSyncCursor';
 const SYNC_LAST_RUN_KEY = 'VRCX_cloudSyncLastRun';
+const SYNC_INTERVAL_MS = 60 * 1000;
 
 const FALLBACK_UPDATED_AT = '1970-01-01T00:00:00.000Z';
 const GAME_LOG_TABLES = [
@@ -32,6 +33,11 @@ const SYNC_COLLECTIONS = new Set([
     'notifications_v2',
     ...GAME_LOG_TABLES
 ]);
+
+let autoSyncTimer = null;
+let autoSyncRunning = false;
+let autoSyncOwnerId = '';
+let autoSyncOptions = {};
 
 function normalizeEndpoint(endpoint) {
     return String(endpoint || '').replace(/\/+$/, '');
@@ -780,6 +786,26 @@ async function pushLocal(ownerId, deviceId) {
     return { pushed: records.length, accepted };
 }
 
+async function runAutoSyncTick() {
+    if (autoSyncRunning || !autoSyncOwnerId) {
+        return;
+    }
+    if (!(await cloudSync.isEnabled())) {
+        cloudSync.stopAutoSync();
+        return;
+    }
+    autoSyncRunning = true;
+    try {
+        const result = await cloudSync.sync(autoSyncOwnerId);
+        await autoSyncOptions.onSynced?.(result);
+    } catch (err) {
+        console.error('Cloud auto sync failed:', err);
+        await autoSyncOptions.onError?.(err);
+    } finally {
+        autoSyncRunning = false;
+    }
+}
+
 const cloudSync = {
     async isEnabled() {
         return configRepository.getBool(SYNC_ENABLED_KEY, false);
@@ -800,6 +826,9 @@ const cloudSync = {
         await configRepository.setBool(SYNC_ENABLED_KEY, Boolean(config.enabled));
         await configRepository.setString(SYNC_ENDPOINT_KEY, normalizeEndpoint(config.endpoint));
         await configRepository.setString(SYNC_TOKEN_KEY, config.token || '');
+        if (!config.enabled) {
+            this.stopAutoSync();
+        }
     },
 
     async sync(ownerId) {
@@ -816,6 +845,27 @@ const cloudSync = {
             ...push,
             lastRun
         };
+    },
+
+    startAutoSync(ownerId, options = {}) {
+        if (!ownerId) {
+            return;
+        }
+        autoSyncOwnerId = ownerId;
+        autoSyncOptions = options;
+        if (autoSyncTimer) {
+            return;
+        }
+        autoSyncTimer = setInterval(runAutoSyncTick, SYNC_INTERVAL_MS);
+    },
+
+    stopAutoSync() {
+        if (autoSyncTimer) {
+            clearInterval(autoSyncTimer);
+            autoSyncTimer = null;
+        }
+        autoSyncOwnerId = '';
+        autoSyncOptions = {};
     }
 };
 

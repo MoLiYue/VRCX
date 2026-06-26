@@ -5,10 +5,11 @@ import configRepository from '../services/config.js';
 import vrcxJsonStorage from '../services/jsonStorage.js';
 
 export async function initInteropApi(isVrOverlay = false) {
-    const interopApi = window.__VRCX_REMOTE__ ? RemoteInteropApi : InteropApi;
+    const isRemote = Boolean(window.__VRCX_REMOTE__);
+    const interopApi = isRemote ? RemoteInteropApi : InteropApi;
 
     if (isVrOverlay) {
-        if (WINDOWS) {
+        if (!isRemote && WINDOWS) {
             await CefSharp.BindObjectAsync('AppApiVr');
         } else {
             // @ts-ignore
@@ -16,7 +17,7 @@ export async function initInteropApi(isVrOverlay = false) {
         }
     } else {
         // #region | Init Cef C# bindings
-        if (WINDOWS) {
+        if (!isRemote && WINDOWS) {
             await CefSharp.BindObjectAsync(
                 'AppApi',
                 'WebApi',
@@ -36,7 +37,7 @@ export async function initInteropApi(isVrOverlay = false) {
             window.AssetBundleManager = interopApi.AssetBundleManager;
             window.AppApiVrElectron = interopApi.AppApiVrElectron;
 
-            if (window.__VRCX_REMOTE__) {
+            if (isRemote) {
                 initRemoteElectronCompat();
             }
         }
